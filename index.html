@@ -1,0 +1,306 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>todaros</title>
+<style>
+  :root {
+    --paper: #fbfaf7;
+    --ink: #1f1d1a;
+    --ink-2: #6b665e;
+    --rule: #dcd8cf;
+    --mark: #2f6f4e;
+    --font: "Hiragino Sans", "Noto Sans JP", "Yu Gothic", system-ui, sans-serif;
+    --mono: "SF Mono", "Menlo", "Consolas", "Noto Sans Mono CJK JP", monospace;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: var(--paper); color: var(--ink); font-family: var(--font); }
+  body { line-height: 1.6; }
+  button { font: inherit; color: inherit; background: none; border: 1px solid var(--rule); border-radius: 3px; padding: 4px 12px; cursor: pointer; }
+  button:hover { border-color: var(--ink-2); }
+  button:focus-visible, textarea:focus-visible, .line:focus-visible { outline: 2px solid var(--mark); outline-offset: 2px; }
+  button.primary { background: var(--ink); color: var(--paper); border-color: var(--ink); }
+  button.primary:hover { background: #000; }
+
+  .wrap { max-width: 1040px; margin: 0 auto; padding: 32px 24px 80px; }
+  header { display: flex; align-items: baseline; gap: 16px; flex-wrap: wrap; padding-bottom: 16px; border-bottom: 1px solid var(--rule); }
+  header h1 { font-size: 20px; font-weight: 600; margin: 0; letter-spacing: .02em; }
+  header .date { font-size: 15px; color: var(--ink-2); }
+  header .who { margin-left: auto; font-size: 13px; color: var(--ink-2); display: flex; gap: 12px; align-items: center; }
+  header .who button { padding: 2px 8px; font-size: 12px; }
+
+  /* sign-in */
+  #gate { padding: 64px 0; max-width: 480px; }
+  #gate p { margin: 0 0 12px; color: var(--ink-2); }
+  #gate button { margin-top: 12px; }
+
+  /* two panes */
+  #app { display: grid; grid-template-columns: 1fr 1fr; gap: 48px; margin-top: 24px; }
+  @media (max-width: 760px) { #app { grid-template-columns: 1fr; gap: 32px; } }
+  .pane h2 { font-size: 13px; font-weight: 500; color: var(--ink-2); margin: 0 0 10px; display: flex; align-items: baseline; gap: 12px; }
+  .pane h2 .act { margin-left: auto; display: flex; gap: 8px; }
+  .pane h2 button { font-size: 12px; padding: 2px 10px; }
+  .hint { font-size: 12px; color: var(--ink-2); margin: 8px 0 0; }
+
+  /* daily list */
+  #daily { list-style: none; margin: 0; padding: 0; min-height: 200px; }
+  #daily li.gap { height: 18px; }
+  #daily li.line { display: flex; align-items: center; gap: 10px; padding: 6px 8px; margin: 0 -8px; border-radius: 3px; cursor: pointer; }
+  #daily li.line:hover { background: rgba(0,0,0,.035); }
+  #daily li.line .box { width: 16px; height: 16px; border: 1.5px solid var(--ink-2); border-radius: 2px; flex: none; }
+  #daily li.line:hover .box { border-color: var(--mark); }
+  #daily li.line.out { animation: out .18s ease-out forwards; }
+  @keyframes out { to { opacity: 0; transform: translateX(8px); } }
+  @media (prefers-reduced-motion: reduce) { #daily li.line.out { animation: none; opacity: 0; } }
+  #done { padding: 40px 0; color: var(--ink-2); }
+  #done strong { display: block; font-size: 22px; font-weight: 600; color: var(--ink); margin-bottom: 4px; }
+
+  /* tasks editor */
+  #tasks { width: 100%; min-height: 60vh; resize: vertical; font-family: var(--mono); font-size: 13.5px; line-height: 1.7; padding: 12px 14px; border: 1px solid var(--rule); border-radius: 3px; background: #fff; color: var(--ink); }
+  #tasks.dirty { border-color: var(--ink-2); }
+
+  #status { position: fixed; left: 50%; bottom: 20px; transform: translateX(-50%); background: var(--ink); color: var(--paper); font-size: 13px; padding: 6px 14px; border-radius: 3px; opacity: 0; transition: opacity .2s; pointer-events: none; }
+  #status.show { opacity: 1; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>todaros</h1>
+    <span class="date" id="today"></span>
+    <span class="who" id="who" hidden><span id="username"></span><button id="signout">サインアウト</button></span>
+  </header>
+
+  <section id="gate">
+    <p>定期タスクをテキストで管理して、今日やる分だけを取り出すツールです。</p>
+    <p>データ（tasks.md と daily.md）はあなたの Puter アカウントに保存されます。この画面の提供者はあなたのデータを持ちません。</p>
+    <button class="primary" id="signin">Puter でサインイン</button>
+  </section>
+
+  <main id="app" hidden>
+    <section class="pane">
+      <h2>今日のタスク <span id="left"></span>
+        <span class="act"><button id="regen" title="tasks.md から今日の分を生成し直す">生成し直す</button></span>
+      </h2>
+      <ul id="daily"></ul>
+      <div id="done" hidden><strong>今日はおしまい</strong>daily.md は空です。あとは自由時間を満喫しましょう。</div>
+      <p class="hint">終わったタスクは押すと消えます。消した状態はそのまま daily.md に保存されます。</p>
+    </section>
+
+    <section class="pane">
+      <h2>tasks.md
+        <span class="act"><button id="save">保存</button></span>
+      </h2>
+      <textarea id="tasks" spellcheck="false"></textarea>
+      <p class="hint">1行1タスク。@m 毎日、@h 平日、@k 休日、@mon〜@sun 曜日、@1〜@31 日付、@ss1/@ss2 2日に1回、@sss1〜@sss3 3日に1回。保存すると今日のタスクも作り直されます（Ctrl+S でも保存）。</p>
+    </section>
+  </main>
+</div>
+<div id="status"></div>
+
+<script src="https://js.puter.com/v2/"></script>
+<script>
+// ============================================================
+// todaros core — todaros.py の移植
+// ============================================================
+const DOW = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
+
+class Task {
+  constructor(line) {
+    this.name = '';
+    this.freqs = [];
+    for (const el of line.split(' ')) {
+      if (el[0] === '@') this.freqs.push(el);
+      else this.name = this.name ? `${this.name} ${el}` : el;
+    }
+  }
+  // 頻度がなく名前だけ → 区切り（出力では空行）
+  isDelimiter() { return this.freqs.length === 0 && this.name.length > 0; }
+  // 頻度だけで名前がない → ステルス区切り（出力しない）
+  isStealthDelimiter() { return this.freqs.length > 0 && this.name.length === 0; }
+  isToday(d) { return isTodayFreq(d, this.freqs); }
+}
+
+function isTodayFreq(d, freqs) {
+  const day = d.getDate();
+  const dow = DOW[d.getDay()];
+  const kyujitsu = dow === 'sat' || dow === 'sun';
+  const heijitsu = !kyujitsu;
+  for (const f of freqs) {
+    const v = f.slice(1);
+    if (f === '@m') return true;
+    if (f === '@h' && heijitsu) return true;
+    if (f === '@k' && kyujitsu) return true;
+    if (v === dow) return true;
+    if (/^\d+$/.test(v) && day === Number(v)) return true;
+    if (v === 'ss1'  && day % 2 === 1) return true;
+    if (v === 'ss2'  && day % 2 === 0) return true;
+    if (v === 'sss1' && day % 3 === 1) return true;
+    if (v === 'sss2' && day % 3 === 2) return true;
+    if (v === 'sss3' && day % 3 === 0) return true;
+  }
+  return false;
+}
+
+// tasks.md のテキスト → 今日の行の配列（'' は区切り）
+function generateDaily(text, d) {
+  const out = [];
+  for (const raw of text.split('\n')) {
+    const line = raw.replace(/\r$/, '');
+    if (line.trim() === '') continue;
+    if (line[0] === '#') continue;
+    const t = new Task(line);
+    if (t.isStealthDelimiter()) continue;
+    if (t.isDelimiter()) { out.push(''); continue; }
+    if (t.isToday(d)) out.push(t.name);
+  }
+  // 先頭・末尾・連続の空行を整理
+  return out.filter((l, i, a) => l !== '' || (i > 0 && a[i - 1] !== '' && a.slice(i + 1).some(x => x !== '')));
+}
+
+// ============================================================
+// storage — 利用者の Puter アカウント上のファイル
+// ============================================================
+const DIR = 'todaros';
+const Store = {
+  async read(name) {
+    try { return await (await puter.fs.read(`${DIR}/${name}`)).text(); }
+    catch { return null; }
+  },
+  async write(name, text) {
+    try { await puter.fs.mkdir(DIR, { createMissingParents: true }); } catch {}
+    await puter.fs.write(`${DIR}/${name}`, text);
+  },
+};
+
+const SAMPLE_TASKS = `# タスク例（自由に書き換えてください）
+毎日やるタスク @m
+平日やるタスク @h
+休日やるタスク @k
+2日に1回やるタスク @ss1
+3日に1回やるタスク @sss2
+月曜日にやるタスク @mon
+火、木にやるタスク @tue @thu
+毎月1日に行うタスク @1
+毎月10、20日に行うタスク @10 @20
+
+# 朝
+朝行うタスク @m
+
+# 夜
+夜行うタスク @m
+`;
+
+// ============================================================
+// app
+// ============================================================
+const $ = s => document.querySelector(s);
+const today = new Date();
+const dateKey = `${today.getFullYear()}/${String(today.getMonth() + 1).padStart(2, '0')}/${String(today.getDate()).padStart(2, '0')}`;
+const JA_DOW = ['日', '月', '火', '水', '木', '金', '土'];
+$('#today').textContent = `${dateKey} (${JA_DOW[today.getDay()]})`;
+
+let tasksText = '';
+let daily = [];   // 今日の行（'' は区切り）
+
+function toast(msg) {
+  const s = $('#status'); s.textContent = msg; s.classList.add('show');
+  clearTimeout(toast.t); toast.t = setTimeout(() => s.classList.remove('show'), 1600);
+}
+
+// daily.md の形式: 1行目に "# yyyy/mm/dd"、以降が行
+function serializeDaily() { return [`# ${dateKey}`, ...daily].join('\n') + '\n'; }
+function parseDaily(text) {
+  const lines = text.replace(/\n$/, '').split('\n');
+  const m = lines[0]?.match(/^# (\d{4}\/\d{2}\/\d{2})$/);
+  return { date: m?.[1] ?? null, lines: m ? lines.slice(1) : lines };
+}
+
+function renderDaily() {
+  const ul = $('#daily'); ul.innerHTML = '';
+  const n = daily.filter(l => l !== '').length;
+  $('#left').textContent = n ? `${n}件` : '';
+  $('#done').hidden = n > 0;
+  daily.forEach((line, i) => {
+    const li = document.createElement('li');
+    if (line === '') { li.className = 'gap'; }
+    else {
+      li.className = 'line'; li.tabIndex = 0; li.dataset.i = i;
+      li.innerHTML = `<span class="box"></span><span></span>`;
+      li.lastChild.textContent = line;
+    }
+    ul.appendChild(li);
+  });
+}
+
+async function saveDaily() {
+  try { await Store.write('daily.md', serializeDaily()); }
+  catch (e) { toast('daily.md の保存に失敗: ' + (e.message || e)); }
+}
+
+async function regenerate(announce = true) {
+  daily = generateDaily(tasksText, today);
+  renderDaily();
+  await saveDaily();
+  if (announce) toast('今日のタスクを生成しました');
+}
+
+async function removeLine(i) {
+  const li = $(`#daily li[data-i="${i}"]`);
+  li.classList.add('out');
+  await new Promise(r => setTimeout(r, 180));
+  daily.splice(i, 1);
+  renderDaily();
+  await saveDaily();
+}
+
+async function saveTasks() {
+  tasksText = $('#tasks').value;
+  try {
+    await Store.write('tasks.md', tasksText);
+    $('#tasks').classList.remove('dirty');
+    await regenerate(false);
+    toast('保存しました');
+  } catch (e) { toast('保存に失敗: ' + (e.message || e)); }
+}
+
+async function boot() {
+  const user = await puter.auth.getUser();
+  $('#username').textContent = user.username;
+  $('#who').hidden = false;
+  $('#gate').hidden = true;
+  $('#app').hidden = false;
+
+  tasksText = await Store.read('tasks.md');
+  if (tasksText === null) { tasksText = SAMPLE_TASKS; await Store.write('tasks.md', tasksText); }
+  $('#tasks').value = tasksText;
+
+  const raw = await Store.read('daily.md');
+  const parsed = raw === null ? null : parseDaily(raw);
+  if (parsed && parsed.date === dateKey) { daily = parsed.lines; renderDaily(); }
+  else await regenerate(false);
+}
+
+$('#signin').onclick = async () => {
+  try { await puter.auth.signIn(); await boot(); }
+  catch (e) { if (e?.code !== 'auth_window_closed') toast('サインインできませんでした'); }
+};
+$('#signout').onclick = () => { puter.auth.signOut(); location.reload(); };
+$('#regen').onclick = () => regenerate();
+$('#save').onclick = saveTasks;
+$('#tasks').oninput = () => $('#tasks').classList.add('dirty');
+document.addEventListener('keydown', e => {
+  if ((e.ctrlKey || e.metaKey) && e.key === 's') { e.preventDefault(); saveTasks(); }
+});
+$('#daily').onclick = e => { const li = e.target.closest('li.line'); if (li) removeLine(Number(li.dataset.i)); };
+$('#daily').onkeydown = e => {
+  const li = e.target.closest('li.line');
+  if (li && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); removeLine(Number(li.dataset.i)); }
+};
+window.addEventListener('beforeunload', e => { if ($('#tasks').classList.contains('dirty')) e.preventDefault(); });
+
+if (puter.auth.isSignedIn()) boot();
+</script>
+</body>
+</html>
