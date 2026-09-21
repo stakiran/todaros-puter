@@ -1,4 +1,5 @@
 # todaros (Puter 版)
+<img width="1064" height="699" alt="Image" src="https://github.com/user-attachments/assets/0633ef77-8a1b-4f65-93b2-5bc6756d2611" />
 
 [stakiran/todaros](https://github.com/stakiran/todaros) の Web 版。
 サーバーも API キーもなく、データは利用者自身の Puter アカウントに保存されます。
