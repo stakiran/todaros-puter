@@ -54,6 +54,9 @@
   @keyframes out { to { opacity: 0; transform: translateX(8px); } }
   @media (prefers-reduced-motion: reduce) { #daily li.line.out { animation: none; opacity: 0; } }
   #done { padding: 40px 0; color: var(--ink-2); }
+  #add { display: flex; gap: 8px; margin-top: 12px; }
+  #add input { flex: 1; min-width: 0; font: inherit; color: var(--ink); background: #fff; border: 1px solid var(--rule); border-radius: 3px; padding: 4px 10px; }
+  #add input:focus-visible { outline: 2px solid var(--mark); outline-offset: 2px; }
   #done strong { display: block; font-size: 22px; font-weight: 600; color: var(--ink); margin-bottom: 4px; }
 
   /* tasks editor */
@@ -85,7 +88,11 @@
       </h2>
       <ul id="daily"></ul>
       <div id="done" hidden><strong>今日はおしまい</strong>daily.md は空です。あとは自由時間を満喫しましょう。</div>
-      <p class="hint">終わったタスクは押すと消えます。消した状態はそのまま daily.md に保存されます。</p>
+      <form id="add" autocomplete="off">
+        <input id="addText" placeholder="今日だけのタスクを追加" aria-label="今日だけのタスクを追加">
+        <button type="submit">追加</button>
+      </form>
+      <p class="hint">終わったタスクは押すと消えます。消した状態はそのまま daily.md に保存されます。ここで追加したタスクは今日の daily.md にだけ入ります（「生成し直す」や tasks.md の保存で消えます）。</p>
     </section>
 
     <section class="pane">
@@ -255,6 +262,14 @@ async function removeLine(i) {
   await saveDaily();
 }
 
+async function addLine(text) {
+  const line = text.trim();
+  if (!line) return;
+  daily.push(line);
+  renderDaily();
+  await saveDaily();
+}
+
 async function saveTasks() {
   tasksText = $('#tasks').value;
   try {
@@ -294,6 +309,13 @@ document.addEventListener('keydown', e => {
   if ((e.ctrlKey || e.metaKey) && e.key === 's') { e.preventDefault(); saveTasks(); }
 });
 $('#daily').onclick = e => { const li = e.target.closest('li.line'); if (li) removeLine(Number(li.dataset.i)); };
+$('#add').onsubmit = e => {
+  e.preventDefault();
+  const input = $('#addText');
+  addLine(input.value);
+  input.value = '';
+  input.focus();
+};
 $('#daily').onkeydown = e => {
   const li = e.target.closest('li.line');
   if (li && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); removeLine(Number(li.dataset.i)); }
